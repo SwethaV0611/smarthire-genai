@@ -387,5 +387,3 @@ The main objective of SmartHire GenAI is to provide an intelligent career assist
 
 Author
 Swetha
-       ↓
-Top-N Relevant Jobs
