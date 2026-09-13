@@ -1,25 +1,18 @@
 import os
-from langchain_ollama import ChatOllama
+import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 def get_secret(name: str):
-    # First check environment variables
-    value = os.getenv(name)
+    """Read from Streamlit secrets first, then environment."""
 
-    if value:
-        return value
-
-    # Then check Streamlit Cloud secrets
     try:
-        import streamlit as st
-
         if name in st.secrets:
             return st.secrets[name]
     except Exception:
         pass
 
-    return None
+    return os.getenv(name)
 
 
 def get_provider():
@@ -32,21 +25,31 @@ def get_provider():
 
 
 def get_llm():
+
     provider = get_provider()
 
+    # ----------------------------
+    # GEMINI (Cloud)
+    # ----------------------------
+
     if provider == "gemini":
+
         api_key = get_secret("GEMINI_API_KEY")
 
         if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY is not configured."
-            )
+            raise ValueError("GEMINI_API_KEY is missing.")
 
         return ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0,
             google_api_key=api_key
         )
+
+    # ----------------------------
+    # OLLAMA (Local only)
+    # ----------------------------
+
+    from langchain_ollama import ChatOllama
 
     return ChatOllama(
         model="llama3.2",
