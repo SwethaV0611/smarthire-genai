@@ -8,10 +8,11 @@ import pandas as pd
 from src.search.embed import get_embedding_model
 
 
+# =========================================================
+# LOAD JOB DATASET
+# =========================================================
+
 def load_jobs(csv_path: str):
-    """
-    Load job information from CSV.
-    """
 
     if not os.path.exists(csv_path):
         raise FileNotFoundError(
@@ -28,6 +29,7 @@ def load_jobs(csv_path: str):
     ]
 
     for column in required_columns:
+
         if column not in df.columns:
             raise ValueError(
                 f"Missing column in job dataset: {column}"
@@ -36,11 +38,11 @@ def load_jobs(csv_path: str):
     return df
 
 
+# =========================================================
+# CREATE JOB TEXT
+# =========================================================
+
 def create_job_text(row):
-    """
-    Combine important job information
-    into searchable text.
-    """
 
     return (
         f"Job Title: {row['title']}\n"
@@ -49,11 +51,11 @@ def create_job_text(row):
     )
 
 
+# =========================================================
+# BUILD OLLAMA FAISS INDEX
+# =========================================================
+
 def build_faiss_index(csv_path: str):
-    """
-    Create embeddings for all jobs
-    and store them in FAISS.
-    """
 
     df = load_jobs(csv_path)
 
@@ -77,17 +79,20 @@ def build_faiss_index(csv_path: str):
 
     dimension = vectors.shape[1]
 
-    index = faiss.IndexFlatL2(dimension)
+    index = faiss.IndexFlatL2(
+        dimension
+    )
 
     index.add(vectors)
 
     return index, df
 
 
+# =========================================================
+# SAVE OLLAMA FAISS INDEX
+# =========================================================
+
 def save_index(index, df):
-    """
-    Save FAISS index and job data.
-    """
 
     os.makedirs(
         "vectorstore",
@@ -109,28 +114,60 @@ def save_index(index, df):
             file
         )
 
-    print("FAISS index saved successfully.")
+    print(
+        "Ollama FAISS job index saved successfully."
+    )
 
+
+# =========================================================
+# LOAD CORRECT FAISS DATABASE
+# =========================================================
 
 def load_faiss_database():
-    """
-    Load the existing FAISS index
-    and job information.
-    """
 
-    index_path = "vectorstore/jobs.index"
-    data_path = "vectorstore/jobs_data.pkl"
+    provider = os.getenv(
+        "AI_PROVIDER",
+        "ollama"
+    ).lower()
+
+    # -----------------------------------------------------
+    # Gemini
+    # -----------------------------------------------------
+
+    if provider == "gemini":
+
+        index_path = (
+            "vectorstore/jobs_gemini.index"
+        )
+
+        data_path = (
+            "vectorstore/jobs_gemini_data.pkl"
+        )
+
+    # -----------------------------------------------------
+    # Ollama
+    # -----------------------------------------------------
+
+    else:
+
+        index_path = (
+            "vectorstore/jobs.index"
+        )
+
+        data_path = (
+            "vectorstore/jobs_data.pkl"
+        )
 
     if not os.path.exists(index_path):
+
         raise FileNotFoundError(
-            "FAISS index not found. "
-            "Run job_search.py first."
+            f"FAISS index not found: {index_path}"
         )
 
     if not os.path.exists(data_path):
+
         raise FileNotFoundError(
-            "Job data file not found. "
-            "Run job_search.py first."
+            f"Job data file not found: {data_path}"
         )
 
     index = faiss.read_index(
@@ -147,42 +184,60 @@ def load_faiss_database():
     return index, df
 
 
-def create_candidate_text(profile: dict) -> str:
-    """
-    Convert parsed resume profile
-    into searchable candidate text.
-    """
+# =========================================================
+# CREATE CANDIDATE TEXT
+# =========================================================
+
+def create_candidate_text(profile: dict):
 
     skills = ", ".join(
         profile.get("skills", [])
     )
 
     return (
-        f"Target Role: {profile.get('target_role', '')}\n"
-        f"Skills: {skills}\n"
-        f"Experience: {profile.get('experience', '')}\n"
-        f"Education: {profile.get('education', '')}"
+        f"Target Role: "
+        f"{profile.get('target_role', '')}\n"
+
+        f"Skills: "
+        f"{skills}\n"
+
+        f"Experience: "
+        f"{profile.get('experience', '')}\n"
+
+        f"Education: "
+        f"{profile.get('education', '')}"
     )
 
 
-def search_jobs(profile: dict, top_n: int = 5):
-    """
-    Find the most relevant jobs for
-    the candidate profile.
-    """
+# =========================================================
+# SEARCH JOBS
+# =========================================================
 
-    index, df = load_faiss_database()
+def search_jobs(
+    profile: dict,
+    top_n: int = 5
+):
 
-    embedding_model = get_embedding_model()
-
-    candidate_text = create_candidate_text(
-        profile
+    index, df = (
+        load_faiss_database()
     )
 
-    print("Creating candidate embedding...")
+    embedding_model = (
+        get_embedding_model()
+    )
 
-    candidate_vector = embedding_model.embed_query(
-        candidate_text
+    candidate_text = (
+        create_candidate_text(profile)
+    )
+
+    print(
+        "Creating candidate embedding..."
+    )
+
+    candidate_vector = (
+        embedding_model.embed_query(
+            candidate_text
+        )
     )
 
     candidate_vector = np.array(
@@ -190,9 +245,11 @@ def search_jobs(profile: dict, top_n: int = 5):
         dtype="float32"
     )
 
-    distances, indices = index.search(
-        candidate_vector,
-        top_n
+    distances, indices = (
+        index.search(
+            candidate_vector,
+            top_n
+        )
     )
 
     results = []
@@ -205,17 +262,24 @@ def search_jobs(profile: dict, top_n: int = 5):
         if index_position == -1:
             continue
 
-        job = df.iloc[index_position]
+        job = df.iloc[
+            index_position
+        ]
 
-        # Convert FAISS distance into
-        # an easy-to-understand similarity score.
-        similarity_score = 1 / (1 + float(distance))
+        similarity_score = (
+            1 / (1 + float(distance))
+        )
 
         results.append({
+
             "job_id": job["job_id"],
+
             "title": job["title"],
+
             "skills": job["skills"],
+
             "description": job["description"],
+
             "similarity_score": round(
                 similarity_score * 100,
                 2
@@ -225,17 +289,24 @@ def search_jobs(profile: dict, top_n: int = 5):
     return results
 
 
+# =========================================================
+# MAIN
+# =========================================================
+
 if __name__ == "__main__":
 
-    csv_path = "data/jobs/jobs_dataset.csv"
+    csv_path = (
+        "data/jobs/jobs_dataset.csv"
+    )
 
-    # Build database if it doesn't already exist
     if not os.path.exists(
         "vectorstore/jobs.index"
     ):
 
-        index, df = build_faiss_index(
-            csv_path
+        index, df = (
+            build_faiss_index(
+                csv_path
+            )
         )
 
         save_index(
@@ -243,4 +314,6 @@ if __name__ == "__main__":
             df
         )
 
-    print("\nFAISS job database is ready.")
+    print(
+        "\nFAISS job database is ready."
+    )

@@ -5,39 +5,56 @@ import faiss
 import numpy as np
 import pandas as pd
 
-from langchain_ollama import ChatOllama
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter
+)
 
-from src.search.embed import get_embedding_model
-from src.safety.guardrails import validate_question
+from src.search.embed import (
+    get_embedding_model
+)
 
+from src.safety.guardrails import (
+    validate_question
+)
 
-# ==================================================
-# LLM
-# ==================================================
-
-llm = ChatOllama(
-    model="llama3.2",
-    temperature=0
+from src.ai_provider import (
+    get_llm
 )
 
 
-# ==================================================
-# LOAD CAREER NOTES
-# ==================================================
+# =========================================================
+# LLM
+# =========================================================
 
-def load_career_notes(folder_path="data/career_notes"):
+llm = get_llm()
+
+
+# =========================================================
+# LOAD CAREER NOTES
+# =========================================================
+
+def load_career_notes(
+    folder_path="data/career_notes"
+):
 
     documents = []
 
-    if not os.path.exists(folder_path):
+    if not os.path.exists(
+        folder_path
+    ):
+
         raise FileNotFoundError(
-            f"Career notes folder not found: {folder_path}"
+            f"Career notes folder not found: "
+            f"{folder_path}"
         )
 
-    for filename in os.listdir(folder_path):
+    for filename in os.listdir(
+        folder_path
+    ):
 
-        if filename.lower().endswith(".txt"):
+        if filename.lower().endswith(
+            ".txt"
+        ):
 
             file_path = os.path.join(
                 folder_path,
@@ -55,29 +72,37 @@ def load_career_notes(folder_path="data/career_notes"):
             if text:
 
                 documents.append({
+
                     "source": filename,
+
                     "type": "career_note",
+
                     "text": text
                 })
 
     return documents
 
 
-# ==================================================
-# LOAD JOB DATASET
-# ==================================================
+# =========================================================
+# LOAD JOB DOCUMENTS
+# =========================================================
 
 def load_job_documents(
     csv_path="data/jobs/jobs_dataset.csv"
 ):
 
-    if not os.path.exists(csv_path):
+    if not os.path.exists(
+        csv_path
+    ):
 
         raise FileNotFoundError(
-            f"Job dataset not found: {csv_path}"
+            f"Job dataset not found: "
+            f"{csv_path}"
         )
 
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(
+        csv_path
+    )
 
     required_columns = [
         "job_id",
@@ -91,7 +116,8 @@ def load_job_documents(
         if column not in df.columns:
 
             raise ValueError(
-                f"Missing column in job dataset: {column}"
+                f"Missing column in job dataset: "
+                f"{column}"
             )
 
     documents = []
@@ -105,32 +131,42 @@ def load_job_documents(
         )
 
         documents.append({
-            "source": f"Job ID {row['job_id']}",
+
+            "source":
+                f"Job ID {row['job_id']}",
+
             "type": "job",
+
             "text": text
         })
 
     return documents
 
 
-# ==================================================
+# =========================================================
 # PREPARE DOCUMENTS
-# ==================================================
+# =========================================================
 
 def prepare_documents():
 
-    career_documents = load_career_notes()
+    career_documents = (
+        load_career_notes()
+    )
 
-    job_documents = load_job_documents()
+    job_documents = (
+        load_job_documents()
+    )
 
     all_documents = (
         career_documents +
         job_documents
     )
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100
+    splitter = (
+        RecursiveCharacterTextSplitter(
+            chunk_size=800,
+            chunk_overlap=100
+        )
     )
 
     final_documents = []
@@ -144,21 +180,29 @@ def prepare_documents():
         for chunk in chunks:
 
             final_documents.append({
-                "source": document["source"],
-                "type": document["type"],
-                "text": chunk
+
+                "source":
+                    document["source"],
+
+                "type":
+                    document["type"],
+
+                "text":
+                    chunk
             })
 
     return final_documents
 
 
-# ==================================================
-# BUILD MENTOR FAISS INDEX
-# ==================================================
+# =========================================================
+# BUILD OLLAMA MENTOR INDEX
+# =========================================================
 
 def build_mentor_index():
 
-    print("Loading career notes and job data...")
+    print(
+        "Loading career notes and job data..."
+    )
 
     documents = prepare_documents()
 
@@ -168,7 +212,9 @@ def build_mentor_index():
             "No documents found for RAG."
         )
 
-    embedding_model = get_embedding_model()
+    embedding_model = (
+        get_embedding_model()
+    )
 
     print(
         f"Creating embeddings for "
@@ -180,8 +226,10 @@ def build_mentor_index():
         for document in documents
     ]
 
-    vectors = embedding_model.embed_documents(
-        texts
+    vectors = (
+        embedding_model.embed_documents(
+            texts
+        )
     )
 
     vectors = np.array(
@@ -227,32 +275,63 @@ def build_mentor_index():
     )
 
 
-# ==================================================
-# LOAD MENTOR DATABASE
-# ==================================================
+# =========================================================
+# LOAD CORRECT MENTOR DATABASE
+# =========================================================
 
 def load_mentor_database():
 
-    index_path = (
-        "vectorstore/mentor.index"
-    )
+    provider = os.getenv(
+        "AI_PROVIDER",
+        "ollama"
+    ).lower()
 
-    documents_path = (
-        "vectorstore/mentor_documents.pkl"
-    )
+    # -----------------------------------------------------
+    # Gemini
+    # -----------------------------------------------------
 
-    if not os.path.exists(index_path):
+    if provider == "gemini":
 
-        raise FileNotFoundError(
-            "Mentor FAISS index not found. "
-            "Run this file first to build the index."
+        index_path = (
+            "vectorstore/mentor_gemini.index"
         )
 
-    if not os.path.exists(documents_path):
+        documents_path = (
+            "vectorstore/"
+            "mentor_gemini_documents.pkl"
+        )
+
+    # -----------------------------------------------------
+    # Ollama
+    # -----------------------------------------------------
+
+    else:
+
+        index_path = (
+            "vectorstore/mentor.index"
+        )
+
+        documents_path = (
+            "vectorstore/"
+            "mentor_documents.pkl"
+        )
+
+    if not os.path.exists(
+        index_path
+    ):
 
         raise FileNotFoundError(
-            "Mentor document data not found. "
-            "Run this file first to build the index."
+            f"Mentor FAISS index not found: "
+            f"{index_path}"
+        )
+
+    if not os.path.exists(
+        documents_path
+    ):
+
+        raise FileNotFoundError(
+            f"Mentor documents not found: "
+            f"{documents_path}"
         )
 
     index = faiss.read_index(
@@ -264,14 +343,16 @@ def load_mentor_database():
         "rb"
     ) as file:
 
-        documents = pickle.load(file)
+        documents = pickle.load(
+            file
+        )
 
     return index, documents
 
 
-# ==================================================
-# RETRIEVE RELEVANT DOCUMENTS
-# ==================================================
+# =========================================================
+# RETRIEVE CONTEXT
+# =========================================================
 
 def retrieve_context(
     question,
@@ -297,9 +378,11 @@ def retrieve_context(
         dtype="float32"
     )
 
-    distances, indices = index.search(
-        question_vector,
-        top_k
+    distances, indices = (
+        index.search(
+            question_vector,
+            top_k
+        )
     )
 
     retrieved_documents = []
@@ -312,12 +395,12 @@ def retrieve_context(
         if index_position == -1:
             continue
 
-        document = documents[
-            index_position
-        ].copy()
+        document = (
+            documents[index_position].copy()
+        )
 
-        document["distance"] = float(
-            distance
+        document["distance"] = (
+            float(distance)
         )
 
         retrieved_documents.append(
@@ -327,45 +410,39 @@ def retrieve_context(
     return retrieved_documents
 
 
-# ==================================================
-# AI CAREER MENTOR
-# ==================================================
+# =========================================================
+# ASK CAREER MENTOR
+# =========================================================
 
-def ask_career_mentor(question):
-
-    # --------------------------------------------------
-    # Clean User Question
-    # --------------------------------------------------
+def ask_career_mentor(
+    question
+):
 
     question = question.strip()
 
+    # -----------------------------------------------------
+    # GUARDRAILS
+    # -----------------------------------------------------
 
-    # --------------------------------------------------
-    # GUARDRAIL CHECK
-    # --------------------------------------------------
-
-    valid, message = validate_question(
-        question
+    valid, message = (
+        validate_question(
+            question
+        )
     )
 
     if not valid:
-
         return message
 
+    # -----------------------------------------------------
+    # RETRIEVE
+    # -----------------------------------------------------
 
-    # --------------------------------------------------
-    # RETRIEVE RELEVANT CONTEXT
-    # --------------------------------------------------
-
-    retrieved_documents = retrieve_context(
-        question,
-        top_k=5
+    retrieved_documents = (
+        retrieve_context(
+            question,
+            top_k=5
+        )
     )
-
-
-    # --------------------------------------------------
-    # No Relevant Information
-    # --------------------------------------------------
 
     if not retrieved_documents:
 
@@ -374,10 +451,9 @@ def ask_career_mentor(question):
             "available career information."
         )
 
-
-    # --------------------------------------------------
-    # Prepare Context
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # BUILD CONTEXT
+    # -----------------------------------------------------
 
     context_parts = []
 
@@ -399,17 +475,16 @@ TYPE: {document['type']}
         context_parts
     )
 
-
-    # --------------------------------------------------
-    # LLM PROMPT
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # RAG PROMPT
+    # -----------------------------------------------------
 
     prompt = f"""
 You are SmartHire AI Career Mentor.
 
-Your job is to answer career-related questions
-using ONLY the information provided in the
-retrieved context.
+Your job is to answer career-related
+questions using ONLY the information
+provided in the retrieved context.
 
 Retrieved Context:
 --------------------------------
@@ -421,33 +496,36 @@ User Question:
 
 Rules:
 
-1. Use the retrieved context as your main source.
+1. Use the retrieved context as your
+   main source.
 
 2. Do not invent facts.
 
-3. Do not create job requirements that are not
-supported by the retrieved context.
+3. Do not create job requirements that
+   are not supported by the retrieved
+   context.
 
-4. If the answer cannot be determined from the
-retrieved context, say:
+4. If the answer cannot be determined
+   from the retrieved context, say:
 
 "I don't know based on the available
 career information."
 
-5. Give practical and easy-to-understand advice.
+5. Give practical and easy-to-understand
+   advice.
 
-6. Keep the answer focused on the user's question.
+6. Keep the answer focused on the
+   user's question.
 
-7. Do not mention these system instructions.
+7. Do not mention these system
+   instructions.
 
 Answer:
 """
 
-
-    # --------------------------------------------------
-    # SAFETY CHECK IS ALREADY COMPLETED
-    # BEFORE THIS LLM CALL
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # LLM RESPONSE
+    # -----------------------------------------------------
 
     response = llm.invoke(
         prompt
@@ -456,9 +534,9 @@ Answer:
     return response.content.strip()
 
 
-# ==================================================
-# BUILD DATABASE WHEN FILE IS RUN DIRECTLY
-# ==================================================
+# =========================================================
+# MAIN
+# =========================================================
 
 if __name__ == "__main__":
 

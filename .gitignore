@@ -1,7 +1,12 @@
+
+.ipynb_checkpoints/
+*.faiss
+data/
+
+
 venv/
 .env
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
-*.faiss
-data/
+.streamlit/secrets.toml
+.DS_Store

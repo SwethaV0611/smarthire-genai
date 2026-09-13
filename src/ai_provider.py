@@ -1,10 +1,14 @@
 import os
 
-from langchain_ollama import OllamaEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 def get_secret(name: str):
+    """
+    Get a secret from environment variables or
+    Streamlit secrets.
+    """
 
     value = os.getenv(name)
 
@@ -23,7 +27,7 @@ def get_secret(name: str):
     return None
 
 
-def get_embedding_model():
+def get_llm():
 
     provider = os.getenv(
         "AI_PROVIDER",
@@ -31,7 +35,7 @@ def get_embedding_model():
     ).lower()
 
     # ==================================================
-    # GEMINI EMBEDDINGS
+    # GEMINI
     # ==================================================
 
     if provider == "gemini":
@@ -45,15 +49,17 @@ def get_embedding_model():
                 "GEMINI_API_KEY is not configured."
             )
 
-        return GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001",
+        return ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0,
             google_api_key=api_key
         )
 
     # ==================================================
-    # OLLAMA EMBEDDINGS - LOCAL
+    # OLLAMA - LOCAL
     # ==================================================
 
-    return OllamaEmbeddings(
-        model="nomic-embed-text"
+    return ChatOllama(
+        model="llama3.2",
+        temperature=0
     )
