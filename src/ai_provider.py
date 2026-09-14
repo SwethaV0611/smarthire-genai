@@ -1,60 +1,68 @@
 import os
-import streamlit as st
 
+from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
-def get_secret(name):
-    """Read a value from Streamlit Secrets or environment variables."""
+def get_secret(name: str):
+    # First try environment variables
+    value = os.getenv(name)
+
+    if value:
+        return value
+
+    # Then try Streamlit secrets
     try:
+        import streamlit as st
+
         if name in st.secrets:
             return st.secrets[name]
     except Exception:
         pass
 
-    return os.getenv(name)
+    return None
 
 
-def get_provider():
-    """Get the selected AI provider."""
+def get_config(name: str, default=None):
+    value = os.getenv(name)
 
-    provider = get_secret("AI_PROVIDER")
+    if value:
+        return value
 
-    if provider:
-        return str(provider).strip().lower()
+    try:
+        import streamlit as st
 
-    # Streamlit Cloud should use Gemini by default.
-    return "gemini"
+        if name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        pass
+
+    return default
 
 
 def get_llm():
-    provider = get_provider()
+
+    provider = get_config("AI_PROVIDER", "ollama").lower()
 
     if provider == "gemini":
+
         api_key = get_secret("GEMINI_API_KEY")
 
         if not api_key:
             raise ValueError(
                 "GEMINI_API_KEY is missing. "
-                "Add GEMINI_API_KEY in Streamlit Cloud Secrets."
+                "Add it to .streamlit/secrets.toml "
+                "or your environment variables."
             )
 
         return ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            google_api_key=api_key,
             temperature=0,
+            google_api_key=api_key
         )
 
-    # Ollama is only used when explicitly selected.
-    if provider == "ollama":
-        from langchain_ollama import ChatOllama
-
-        return ChatOllama(
-            model="llama3.2",
-            temperature=0,
-        )
-
-    raise ValueError(
-        f"Unsupported AI_PROVIDER: {provider}. "
-        "Use 'gemini' or 'ollama'."
+    # Local Ollama option
+    return ChatOllama(
+        model="llama3.2",
+        temperature=0
     )
